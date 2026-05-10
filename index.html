@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Limpieza del Salón</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: Arial, sans-serif;
+  background: #eee;
+  padding: 24px 16px;
+  display: flex; flex-direction: column; align-items: center;
+}
+.controles {
+  display: flex; gap: 10px; align-items: center;
+  justify-content: center; margin-bottom: 20px; flex-wrap: wrap;
+}
+.controles select {
+  padding: 6px 12px; font-size: 0.9rem;
+  border: 1px solid #bbb; border-radius: 5px; background: #fff;
+}
+.btn-pdf {
+  background: #1a7abf; color: #fff; border: none;
+  padding: 8px 22px; border-radius: 5px; font-size: 0.9rem;
+  font-weight: bold; cursor: pointer;
+}
+.btn-pdf:hover { background: #145f96; }
+
+.formato {
+  background: #fff;
+  width: 100%; max-width: 820px;
+  padding: 48px 64px;
+  border: 1px solid #bbb;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+}
+.titulo {
+  text-align: center; font-size: 1.2rem; font-weight: bold;
+  text-transform: uppercase; color: #1a7abf;
+  letter-spacing: 3px; margin-bottom: 24px;
+  outline: none;
+}
+
+table { width: 100%; border-collapse: collapse; font-size: 1rem; }
+thead tr { background: #1a7abf; }
+th {
+  padding: 12px 20px; text-align: left;
+  font-size: 0.78rem; text-transform: uppercase;
+  color: #fff; border: 1px solid #1a7abf;
+  letter-spacing: 0.05em; outline: none;
+}
+td { padding: 10px 20px; border: 1px solid #ddd; background: #fff; }
+.grupo { font-weight: bold; color: #1a7abf; font-size: 1.05rem; }
+.semana { color: #333; }
+.editable { outline: none; display: inline-block; min-width: 40px; }
+
+@media print {
+  body { background: #fff; padding: 0; }
+  .controles { display: none !important; }
+  .formato { box-shadow: none; border: none; padding: 28px 40px; max-width: 100%; }
+  thead tr { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}
+</style>
+</head>
+<body>
+
+<div class="controles">
+  <select id="sel" onchange="render()"></select>
+  <button class="btn-pdf" onclick="window.print()">⬇ Imprimir / PDF</button>
+</div>
+
+<div class="formato" id="fmt"></div>
+
+<script>
+const SKIP = '2026-06-08';
+const ANCHOR = new Date('2026-05-11T00:00:00');
+const ANCHOR_IDX = 6;
+const ABR = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+
+function toStr(d) {
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+}
+function getLunes(d) {
+  const m = new Date(d); m.setHours(0,0,0,0);
+  const day = m.getDay();
+  m.setDate(m.getDate() + (day===0 ? -6 : 1-day));
+  return m;
+}
+function getGrupo(lunes) {
+  const semanas = Math.round((lunes - ANCHOR) / 604800000);
+  const saltadas = lunes > new Date(SKIP+'T00:00:00') ? 1 : 0;
+  return ((ANCHOR_IDX + semanas - saltadas) % 7 + 7) % 7 + 1;
+}
+function fmtC(d) { return d.getDate()+' '+ABR[d.getMonth()]; }
+
+function get7Semanas(desde) {
+  const res = [];
+  let lunes = getLunes(new Date(desde));
+  let asignadas = 0;
+  while (asignadas < 7) {
+    const dom = new Date(lunes.getTime() + 6*86400000);
+    if (toStr(lunes) !== SKIP) {
+      res.push({ lunes: new Date(lunes), dom, grupo: getGrupo(lunes) });
+      asignadas++;
+    }
+    lunes = new Date(lunes.getTime() + 604800000);
+  }
+  return res;
+}
+
+const sel = document.getElementById('sel');
+for (let i = 0; i < 20; i++) {
+  let cur = new Date('2026-05-11T00:00:00');
+  let contadas = 0;
+  while (contadas < i * 7) {
+    if (toStr(cur) !== SKIP) contadas++;
+    cur = new Date(cur.getTime() + 604800000);
+  }
+  const s = get7Semanas(cur);
+  const o = document.createElement('option');
+  o.value = toStr(cur);
+  o.textContent = fmtC(s[0].lunes) + ' – ' + fmtC(s[6].dom);
+  sel.appendChild(o);
+}
+
+const hoyL = getLunes(new Date());
+let mejorIdx = 0;
+for (let i = 0; i < sel.options.length; i++) {
+  const s = get7Semanas(new Date(sel.options[i].value+'T00:00:00'));
+  if (s[0].lunes <= hoyL) mejorIdx = i;
+}
+sel.selectedIndex = mejorIdx;
+
+function render() {
+  const semanas = get7Semanas(new Date(sel.value+'T00:00:00'));
+  const filas = semanas.map(s => `<tr>
+    <td class="grupo"><span class="editable" contenteditable="true">Grupo ${s.grupo}</span></td>
+    <td class="semana"><span class="editable" contenteditable="true">${fmtC(s.lunes)} al ${fmtC(s.dom)}</span></td>
+  </tr>`).join('');
+
+  document.getElementById('fmt').innerHTML = `
+    <div class="titulo" contenteditable="true">Limpieza del Salón</div>
+    <table>
+      <thead><tr>
+        <th contenteditable="true">Grupo</th>
+        <th contenteditable="true">Semana</th>
+      </tr></thead>
+      <tbody>${filas}</tbody>
+    </table>
+  `;
+}
+render();
+</script>
+</body>
+</html>
