@@ -159,7 +159,7 @@ function render() {
   const semanas = get7Semanas(new Date(sel.value+'T00:00:00'));
   const filas = semanas.map((s, idx) => `<tr>
     <td class="grupo"><span class="editable grupo-edit" contenteditable="true" data-idx="${idx}">Grupo ${s.grupo}</span></td>
-    <td class="semana"><span class="editable" contenteditable="true">${fmtC(s.lunes)} al ${fmtC(s.dom)}</span></td>
+    <td class="semana"><span class="editable semana-edit" contenteditable="true" data-idx="${idx}" data-lunes="${toStr(s.lunes)}">${fmtC(s.lunes)} al ${fmtC(s.dom)}</span></td>
   </tr>`).join('');
 
   document.getElementById('fmt').innerHTML = `
@@ -186,6 +186,50 @@ function render() {
       for (let i = startIdx + 1; i < gruposEdit.length; i++) {
         num = (num % 7) + 1;
         gruposEdit[i].textContent = `Grupo ${num}`;
+      }
+    });
+  });
+
+  const semanasEdit = document.querySelectorAll('.semana-edit');
+  semanasEdit.forEach(el => {
+    el.addEventListener('blur', function() {
+      const match = this.textContent.match(/(\d{1,2})\s+(?:de\s+)?([a-zA-Z]{3})/i);
+      if (!match) return;
+      const d = parseInt(match[1], 10);
+      const mStr = match[2].toLowerCase();
+      const mIdx = ABR.findIndex(a => a.toLowerCase() === mStr);
+      if (mIdx === -1) return;
+
+      const origDateStr = this.getAttribute('data-lunes');
+      let origDate = new Date(origDateStr + 'T00:00:00');
+      
+      const origTime = origDate.getTime();
+      let bestYear = origDate.getFullYear();
+      let minDiff = Infinity;
+      let bestDate = null;
+      for (let y = bestYear - 1; y <= bestYear + 1; y++) {
+        const testDate = new Date(y, mIdx, d);
+        const diff = Math.abs(testDate.getTime() - origTime);
+        if (diff < minDiff) {
+          minDiff = diff;
+          bestDate = testDate;
+        }
+      }
+      
+      let curLunes = getLunes(bestDate);
+      const dom = new Date(curLunes.getTime() + 6*86400000);
+      this.textContent = `${fmtC(curLunes)} al ${fmtC(dom)}`;
+      this.setAttribute('data-lunes', toStr(curLunes));
+
+      const startIdx = parseInt(this.getAttribute('data-idx'), 10);
+      for (let i = startIdx + 1; i < semanasEdit.length; i++) {
+        curLunes = new Date(curLunes.getTime() + 604800000);
+        if (toStr(curLunes) === SKIP) {
+          curLunes = new Date(curLunes.getTime() + 604800000);
+        }
+        const domNext = new Date(curLunes.getTime() + 6*86400000);
+        semanasEdit[i].textContent = `${fmtC(curLunes)} al ${fmtC(domNext)}`;
+        semanasEdit[i].setAttribute('data-lunes', toStr(curLunes));
       }
     });
   });
