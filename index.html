@@ -96,6 +96,9 @@ const ANCHOR = new Date('2026-05-11T00:00:00');
 const ANCHOR_IDX = 6;
 const ABR = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
 
+let customGrupos = JSON.parse(localStorage.getItem('limpieza_grupos') || '{}');
+let customSemanas = JSON.parse(localStorage.getItem('limpieza_semanas') || '{}');
+
 function toStr(d) {
   return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
 }
@@ -157,10 +160,73 @@ if (fechaHoyEl) {
 
 function render() {
   const semanas = get7Semanas(new Date(sel.value+'T00:00:00'));
-  const filas = semanas.map((s, idx) => `<tr>
-    <td class="grupo"><span class="editable grupo-edit" contenteditable="true" data-idx="${idx}">Grupo ${s.grupo}</span></td>
-    <td class="semana"><span class="editable semana-edit" contenteditable="true" data-idx="${idx}" data-lunes="${toStr(s.lunes)}">${fmtC(s.lunes)} al ${fmtC(s.dom)}</span></td>
-  </tr>`).join('');
+  
+  let prevGrupoNum = null;
+  let prevEndLunes = null;
+
+  const filas = semanas.map((s, idx) => {
+    const origLunes = toStr(s.lunes);
+    
+    let grupoTxt = customGrupos[origLunes];
+    if (!grupoTxt) {
+      if (prevGrupoNum !== null) {
+        let num = (prevGrupoNum % 7) + 1;
+        grupoTxt = `Grupo ${num}`;
+      } else {
+        grupoTxt = `Grupo ${s.grupo}`;
+      }
+    }
+    const gMatch = grupoTxt.match(/\d+/);
+    if (gMatch) prevGrupoNum = parseInt(gMatch[0], 10);
+
+    let semanaTxt = customSemanas[origLunes];
+    let curDataLunes = toStr(s.lunes);
+    if (!semanaTxt) {
+      if (prevEndLunes !== null) {
+        let curStart = new Date(prevEndLunes.getTime() + 86400000);
+        if (toStr(curStart) === SKIP || toStr(getLunes(curStart)) === SKIP) {
+          curStart = new Date(curStart.getTime() + 604800000);
+        }
+        const domNext = new Date(curStart.getTime() + 6*86400000);
+        semanaTxt = `${fmtC(curStart)} al ${fmtC(domNext)}`;
+        curDataLunes = toStr(curStart);
+      } else {
+        semanaTxt = `${fmtC(s.lunes)} al ${fmtC(s.dom)}`;
+      }
+    }
+    
+    const matches = [...semanaTxt.matchAll(/(\d{1,2})(?:\s+(?:de\s+)?([a-zA-Z]{3}))?/gi)];
+    if (matches.length > 0) {
+      const lastMatch = matches[matches.length - 1];
+      const dEnd = parseInt(lastMatch[1], 10);
+      let mEndIdx = new Date(origLunes + 'T00:00:00').getMonth();
+      if (lastMatch[2]) {
+         const foundIdx = ABR.findIndex(a => a.toLowerCase() === lastMatch[2].toLowerCase());
+         if (foundIdx !== -1) mEndIdx = foundIdx;
+      }
+      const origDate = new Date(origLunes + 'T00:00:00');
+      const origTime = origDate.getTime();
+      let bestYear = origDate.getFullYear();
+      let minDiff = Infinity;
+      let bestEndDate = null;
+      for (let y = bestYear - 1; y <= bestYear + 1; y++) {
+        const testDate = new Date(y, mEndIdx, dEnd);
+        const diff = Math.abs(testDate.getTime() - origTime);
+        if (diff < minDiff) {
+          minDiff = diff;
+          bestEndDate = testDate;
+        }
+      }
+      prevEndLunes = bestEndDate;
+    } else {
+      prevEndLunes = null;
+    }
+
+    return `<tr>
+      <td class="grupo"><span class="editable grupo-edit" contenteditable="true" data-idx="${idx}" data-orig-lunes="${origLunes}">${grupoTxt}</span></td>
+      <td class="semana"><span class="editable semana-edit" contenteditable="true" data-idx="${idx}" data-orig-lunes="${origLunes}" data-lunes="${curDataLunes}">${semanaTxt}</span></td>
+    </tr>`;
+  }).join('');
 
   document.getElementById('fmt').innerHTML = `
     <div class="titulo" contenteditable="true">Limpieza del Salón</div>
@@ -183,10 +249,17 @@ function render() {
       if (num < 1 || num > 7) return;
       const startIdx = parseInt(this.getAttribute('data-idx'), 10);
       
+      const thisOrig = this.getAttribute('data-orig-lunes');
+      customGrupos[thisOrig] = this.textContent;
+
       for (let i = startIdx + 1; i < gruposEdit.length; i++) {
         num = (num % 7) + 1;
-        gruposEdit[i].textContent = `Grupo ${num}`;
+        const newTxt = `Grupo ${num}`;
+        gruposEdit[i].textContent = newTxt;
+        const origLunes = gruposEdit[i].getAttribute('data-orig-lunes');
+        customGrupos[origLunes] = newTxt;
       }
+      localStorage.setItem('limpieza_grupos', JSON.stringify(customGrupos));
     });
   });
 
@@ -196,7 +269,9 @@ function render() {
       const matches = [...this.textContent.matchAll(/(\d{1,2})(?:\s+(?:de\s+)?([a-zA-Z]{3}))?/gi)];
       if (matches.length === 0) return;
 
-      const origDateStr = this.getAttribute('data-lunes');
+      const origDateStr = this.getAttribute('data-orig-lunes');
+      customSemanas[origDateStr] = this.textContent;
+
       let origDate = new Date(origDateStr + 'T00:00:00');
       
       const lastMatch = matches[matches.length - 1];
@@ -229,11 +304,16 @@ function render() {
         }
         
         const domNext = new Date(curStart.getTime() + 6*86400000);
-        semanasEdit[i].textContent = `${fmtC(curStart)} al ${fmtC(domNext)}`;
+        const newTxt = `${fmtC(curStart)} al ${fmtC(domNext)}`;
+        semanasEdit[i].textContent = newTxt;
         semanasEdit[i].setAttribute('data-lunes', toStr(curStart));
         
+        const loopOrigLunes = semanasEdit[i].getAttribute('data-orig-lunes');
+        customSemanas[loopOrigLunes] = newTxt;
+
         curStart = new Date(domNext.getTime() + 86400000);
       }
+      localStorage.setItem('limpieza_semanas', JSON.stringify(customSemanas));
     });
   });
 }
