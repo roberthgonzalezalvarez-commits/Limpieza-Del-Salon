@@ -193,43 +193,46 @@ function render() {
   const semanasEdit = document.querySelectorAll('.semana-edit');
   semanasEdit.forEach(el => {
     el.addEventListener('blur', function() {
-      const match = this.textContent.match(/(\d{1,2})\s+(?:de\s+)?([a-zA-Z]{3})/i);
-      if (!match) return;
-      const d = parseInt(match[1], 10);
-      const mStr = match[2].toLowerCase();
-      const mIdx = ABR.findIndex(a => a.toLowerCase() === mStr);
-      if (mIdx === -1) return;
+      const matches = [...this.textContent.matchAll(/(\d{1,2})(?:\s+(?:de\s+)?([a-zA-Z]{3}))?/gi)];
+      if (matches.length === 0) return;
 
       const origDateStr = this.getAttribute('data-lunes');
       let origDate = new Date(origDateStr + 'T00:00:00');
       
+      const lastMatch = matches[matches.length - 1];
+      const dEnd = parseInt(lastMatch[1], 10);
+      let mEndIdx = origDate.getMonth();
+      if (lastMatch[2]) {
+        const foundIdx = ABR.findIndex(a => a.toLowerCase() === lastMatch[2].toLowerCase());
+        if (foundIdx !== -1) mEndIdx = foundIdx;
+      }
+
       const origTime = origDate.getTime();
       let bestYear = origDate.getFullYear();
       let minDiff = Infinity;
-      let bestDate = null;
+      let bestEndDate = null;
       for (let y = bestYear - 1; y <= bestYear + 1; y++) {
-        const testDate = new Date(y, mIdx, d);
+        const testDate = new Date(y, mEndIdx, dEnd);
         const diff = Math.abs(testDate.getTime() - origTime);
         if (diff < minDiff) {
           minDiff = diff;
-          bestDate = testDate;
+          bestEndDate = testDate;
         }
       }
       
-      let curLunes = getLunes(bestDate);
-      const dom = new Date(curLunes.getTime() + 6*86400000);
-      this.textContent = `${fmtC(curLunes)} al ${fmtC(dom)}`;
-      this.setAttribute('data-lunes', toStr(curLunes));
-
+      let curStart = new Date(bestEndDate.getTime() + 86400000);
       const startIdx = parseInt(this.getAttribute('data-idx'), 10);
+      
       for (let i = startIdx + 1; i < semanasEdit.length; i++) {
-        curLunes = new Date(curLunes.getTime() + 604800000);
-        if (toStr(curLunes) === SKIP) {
-          curLunes = new Date(curLunes.getTime() + 604800000);
+        if (toStr(curStart) === SKIP || toStr(getLunes(curStart)) === SKIP) {
+          curStart = new Date(curStart.getTime() + 604800000);
         }
-        const domNext = new Date(curLunes.getTime() + 6*86400000);
-        semanasEdit[i].textContent = `${fmtC(curLunes)} al ${fmtC(domNext)}`;
-        semanasEdit[i].setAttribute('data-lunes', toStr(curLunes));
+        
+        const domNext = new Date(curStart.getTime() + 6*86400000);
+        semanasEdit[i].textContent = `${fmtC(curStart)} al ${fmtC(domNext)}`;
+        semanasEdit[i].setAttribute('data-lunes', toStr(curStart));
+        
+        curStart = new Date(domNext.getTime() + 86400000);
       }
     });
   });
